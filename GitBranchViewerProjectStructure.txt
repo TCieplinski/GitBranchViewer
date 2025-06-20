@@ -1,0 +1,22 @@
+GitBranchViewer/
+├── Program.cs
+├── appsettings.json
+├── Models/
+│   └── GitRepositoryConfig.cs
+├── Services/
+│   ├── GitService.cs
+│   ├── BranchComparisonService.cs
+│   └── ConfigLoader.cs
+├── Utils/
+│   └── FileHelper.cs
+├── Pages/
+│   └── (planned)
+├── Shared/
+│   └── (optional layout components)
+├── Data/
+│   └── (optional data services)
+├── wwwroot/
+│   └── (static files)
+└── docs/
+    └── GitBranchViewerDocumentation.md
+
