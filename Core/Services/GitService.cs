@@ -27,7 +27,7 @@ namespace GitBranchViewer.Core.Services
 
         public List<string> GetBranches()
         {
-            var output = RunGitCommand("branch --list");
+            var output = RunGitCommand("branch --list", _repositoryPath);
             return output
                 .Split('\n')
                 .Select(line => line.Trim().TrimStart('*').Trim())
@@ -38,7 +38,7 @@ namespace GitBranchViewer.Core.Services
         public List<(string Hash, string Author, string Date, string Message)> GetCommits(string branch, int count = 50)
         {
             var format = "--pretty=format:\"%h|%an|%ad|%s\"";
-            var output = RunGitCommand($"log {branch} -n {count} {format}");
+            var output = RunGitCommand($"log {branch} -n {count} {format}", _repositoryPath);
             return output
                 .Split('\n')
                 .Select(line => line.Trim('\"'))
@@ -47,7 +47,7 @@ namespace GitBranchViewer.Core.Services
                 {
                     var parts = line.Split('|');
                     if (parts.Length < 4)
-                        return (Hash: "[invalid]", Author: "", Date: "", Message: line); // Or skip this with a `Where` above
+                        return (Hash: "[invalid]", Author: "", Date: "", Message: line);
                     return (parts[0], parts[1], parts[2], parts[3]);
                 })
                 .ToList();
@@ -55,7 +55,7 @@ namespace GitBranchViewer.Core.Services
 
         public List<GitFileChange> GetChangedFilesBetweenBranches(string branchA, string branchB)
         {
-            var output = RunGitCommand($"diff --name-status {branchA}..{branchB}");
+            var output = RunGitCommand($"diff --name-status {branchA}..{branchB}", _repositoryPath);
 
             return output.Split('\n')
                 .Where(line => !string.IsNullOrWhiteSpace(line))
@@ -69,16 +69,32 @@ namespace GitBranchViewer.Core.Services
 
         public string GetFileDiff(string filePath, string branchA, string branchB)
         {
-            return RunGitCommand($"diff {branchA}..{branchB} -- \"{filePath}\"");
+            return RunGitCommand($"diff {branchA}..{branchB} -- \"{filePath}\"", _repositoryPath);
         }
 
-        private string RunGitCommand(string arguments)
+        // ----------------------------
+        // Static Git Utilities for MergeRepoManager
+        // ----------------------------
+
+        public static void InitRepository(string path, string remoteUrl)
+        {
+            RunGitCommand("init", path);
+            RunGitCommand($"remote add origin {remoteUrl}", path);
+            RunGitCommand("fetch", path);
+        }
+
+        public static void AddWorktree(string repoPath, string worktreePath, string branch)
+        {
+            RunGitCommand($"worktree add \"{worktreePath}\" {branch}", repoPath);
+        }
+
+        private static string RunGitCommand(string arguments, string workingDirectory)
         {
             var psi = new ProcessStartInfo
             {
                 FileName = "git",
                 Arguments = arguments,
-                WorkingDirectory = _repositoryPath,
+                WorkingDirectory = workingDirectory,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
