@@ -8,24 +8,29 @@ namespace GitBranchViewer.Core.Config
     public class GitRepositoryConfig
     {
         /// <summary>
-        /// Friendly display name shown to user.
+        /// Display name shown in UI.
         /// </summary>
         public string Name { get; set; }
 
         /// <summary>
-        /// Local file system path to repository root (must contain .git folder).
+        /// Local path to the repository (optional if RemoteOnly = true).
         /// </summary>
-        public string Path { get; set; }
+        public string? Path { get; set; }
 
         /// <summary>
-        /// Optional mapping of custom branch types, like "main" or "production".
-        /// </summary>
-        public Dictionary<string, string> BranchTypes { get; set; } = new();
-
-        /// <summary>
-        /// Remote Git URL used to initialize or sync merge folders.
-        /// Example: https://github.com/user/GitBranchViewer.git
+        /// Remote Git URL used for fetches or remote-only comparisons.
         /// </summary>
         public string RemoteUrl { get; set; }
+
+        /// <summary>
+        /// List of semantic type to branch mappings (e.g. feature to v1.0.0).
+        /// Allows duplicates for one-to-many relationships.
+        /// </summary>
+        public List<BranchConfig> Branches { get; set; } = new();
+
+        /// <summary>
+        /// If true, Path is ignored and all Git operations are performed remotely or via temporary clone.
+        /// </summary>
+        public bool IsMultiBranch { get; set; } = false;
     }
 }

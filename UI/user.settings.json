@@ -4,39 +4,47 @@
       "Name": "TestRepo",
       "Path": "~\\git_sources\\TestRepo",
       "RemoteUrl": "https://github.com/TCieplinski/TestRepo.git",
-      "BranchTypes": [
+      "Branches": [
         {
           "Type": "feature",
-          "Branch": "v1.0.0"
+          "Name": "v1.0.0",
+          "Path": ""
         },
         {
           "Type": "feature",
-          "Branch": "v2.0.0"
+          "Name": "v2.0.0",
+          "Path": ""
         },
         {
           "Type": "main",
-          "Branch": "main"
+          "Name": "main",
+          "Path": ""
         }
-      ]
+      ],
+      "IsMultiBranch": false
     },
     {
       "Name": "GitBranchViewer",
       "Path": null,
       "RemoteUrl": "https://github.com/TCieplinski/GitBranchViewer",
-      "BranchTypes": [
+      "Branches": [
         {
           "Type": "feature",
-          "Branch": "v1.0.0"
+          "Name": "v1.0.0",
+          "Path": ""
         },
         {
           "Type": "feature",
-          "Branch": "v2.0.0"
+          "Name": "v2.0.0",
+          "Path": ""
         },
         {
           "Type": "main",
-          "Branch": "main"
+          "Name": "main",
+          "Path": ""
         }
-      ]
+      ],
+      "IsMultiBranch": true
     }
   ],
   "DefaultDiffOptions": {
@@ -45,5 +53,6 @@
   },
   "MergeFolderRootPath": "C:\\Temp\\GitComparisons",
   "MergeSubfolderName": "Merge",
-  "RemoteTempFolderRoot": "C:\\Temp\\RemoteGitWork"
+  "RemoteTempFolderRoot": "C:\\Temp\\RemoteGitWork",
+  "DiffToolPath": "C:\\Program Files\\Git\\usr\\bin\\diff.exe"
 }

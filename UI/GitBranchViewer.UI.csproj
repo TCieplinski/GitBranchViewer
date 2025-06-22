@@ -5,6 +5,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Radzen.Blazor" Version="4.34.4" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Core\GitBranchViewer.Core.csproj" />
   </ItemGroup>
 

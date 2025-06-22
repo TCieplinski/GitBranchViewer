@@ -1,196 +1,108 @@
-@page "/compare"
+﻿@page "/compare"
 @using GitBranchViewer.Core.Config
-@using GitBranchViewer.Core.Models
 @using GitBranchViewer.Core.Services
-@using Microsoft.AspNetCore.WebUtilities
-@inject GitViewerSettings Settings
+@inject GitBranchViewer.Core.Services.SettingsService SettingsService
 @inject NavigationManager NavManager
+@inject IJSRuntime JS
 
-<h3>Compare Branches</h3>
+<h3>🔍 Compare Branches</h3>
 
-@if (!IsValid)
+@if (SettingsService.Current.GitRepositories.Count == 0)
 {
-    <p class="text-danger">Invalid query or repository not found.</p>
-}
-else if (Error is not null)
-{
-    <p class="text-danger">@Error</p>
+    <p>No repositories configured.</p>
 }
 else
 {
-    <h5>@branchA ↔ @branchB in @Repo.Name</h5>
-
-    <h6>🔄 Changed Files</h6>
-    @if (ChangedFiles?.Count == 0)
-    {
-        <p><i>No differences found.</i></p>
-    }
-    else
-    {
-        @foreach (var file in ChangedFiles)
-        {
-            <details @onclick="() => LoadDiff(file.FileName)">
-                <summary><b>@file.Status</b> @file.FileName</summary>
-                @if (ExpandedFiles.Contains(file.FileName))
-                {
-                    <pre class="diff-box">
-                        @{
-                            var lines = FileDiffs[file.FileName].Split('\n');
-                            int oldLine = 0, newLine = 0;
-                            foreach (var line in lines)
-                            {
-                                string label = "     ";
-                                var css = GetDiffClass(line);
-
-                                if (line.StartsWith("@@"))
-                                {
-                                    var parts = line.Split(' ');
-                                    if (parts.Length >= 3)
-                                    {
-                                        oldLine = ParseHunkStart(parts[1]);
-                                        newLine = ParseHunkStart(parts[2]);
-                                    }
-                                    label = "     ";
-                                }
-                                else if (line.StartsWith("+"))
-                                {
-                                    label = $"     {newLine++,4}";
-                                }
-                                else if (line.StartsWith("-"))
-                                {
-                                    label = $"{oldLine++,4}     ";
-                                }
-                                else
-                                {
-                                    label = $"{oldLine++,4} {newLine++,4}";
-                                }
-
-                            <span class="@css">@label: @line</span>
-
-                                <br />
-                            }
-                        }
-                                    </pre>
-                }
-            </details>
-        }
-    }
-
-    <h6>📜 New Commits in @branchB (vs @branchA)</h6>
-    @if (Commits?.Count == 0)
-    {
-        <p><i>No new commits found.</i></p>
-    }
-    else
-    {
-        <ul>
-            @foreach (var commit in Commits)
+    <div class="form-group">
+        <label>Repository:</label>
+        <select class="form-control" @bind="SelectedRepoName">
+            <option value="">-- Select --</option>
+            @foreach (var repo in SettingsService.Current.GitRepositories)
             {
-                <li><b>@commit.Hash</b> — @commit.Message (@commit.Author, @commit.Date)</li>
+                <option value="@repo.Name">@repo.Name</option>
             }
-        </ul>
+        </select>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(SelectedRepoName))
+    {
+        <div class="form-group mt-3">
+            <label>Branch A:</label>
+            <select class="form-control" @bind="BranchA">
+                <option value="">-- Select --</option>
+                @foreach (var b in GetBranchesForSelectedRepo())
+                {
+                    <option value="@b">@b</option>
+                }
+            </select>
+
+            <label class="mt-2">Branch B:</label>
+            <select class="form-control" @bind="BranchB">
+                <option value="">-- Select --</option>
+                @foreach (var b in GetBranchesForSelectedRepo())
+                {
+                    <option value="@b">@b</option>
+                }
+            </select>
+        </div>
+    }
+
+    @if (CanShowCompareMode)
+    {
+        <div class="form-group mt-4">
+            <label>Compare Strategy:</label>
+            <select class="form-control" @bind="CompareMode">
+                <option value="">-- Choose Compare Mode --</option>
+                <option value="Simple">Simple</option>
+                <option value="Merge">Merge</option>
+                <option value="Remote">Remote</option>
+                <option value="Quick">Quick</option>
+            </select>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(CompareMode))
+    {
+        <div class="mt-3">
+            <button class="btn btn-primary" @onclick="LaunchComparisonPage">Compare</button>
+            <button class="btn btn-outline-secondary ml-2" @onclick="ClearOptions">Clear Options</button>
+        </div>
     }
 }
 
-<style>
-    .diff-box {
-        background-color: #f8f9fa;
-        border: 1px solid #ccc;
-        padding: 0.5rem;
-        font-family: monospace;
-        white-space: pre-wrap;
-        margin-top: 0.5rem;
-    }
-
-    .diff-add {
-        color: green;
-    }
-
-    .diff-del {
-        color: red;
-    }
-
-    .diff-meta {
-        color: gray;
-    }
-</style>
-
 @code {
-    private string repo;
-    private string branchA;
-    private string branchB;
+    private string SelectedRepoName = string.Empty;
+    private string BranchA = string.Empty;
+    private string BranchB = string.Empty;
+    private string CompareMode = string.Empty;
 
-    private GitRepositoryConfig Repo;
-    private List<GitFileChange> ChangedFiles;
-    private List<(string Hash, string Author, string Date, string Message)> Commits;
-
-    private Dictionary<string, string> FileDiffs = new();
-    private HashSet<string> ExpandedFiles = new();
-
-    private bool IsValid = true;
-    private string Error;
-
-    private GitService _git;
-    private BranchComparisonService _comparer;
-
-    protected override void OnInitialized()
+    private List<string> GetBranchesForSelectedRepo()
     {
-        try
-        {
-            var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
-            var query = QueryHelpers.ParseQuery(uri.Query);
-
-            repo = query.TryGetValue("repo", out var r) ? r.ToString() : null;
-            branchA = query.TryGetValue("branchA", out var a) ? a.ToString() : null;
-            branchB = query.TryGetValue("branchB", out var b) ? b.ToString() : null;
-
-            if (string.IsNullOrWhiteSpace(repo) || string.IsNullOrWhiteSpace(branchA) || string.IsNullOrWhiteSpace(branchB))
-            {
-                IsValid = false;
-                return;
-            }
-
-            Repo = Settings.GitRepositories.FirstOrDefault(x => string.Equals(x.Name, repo, StringComparison.OrdinalIgnoreCase));
-            if (Repo == null)
-            {
-                IsValid = false;
-                return;
-            }
-
-            _git = new GitService(Repo.Path);
-            _comparer = new BranchComparisonService(_git, Settings.DefaultDiffOptions);
-
-            ChangedFiles = _comparer.GetChangedFiles(branchA, branchB);
-            Commits = _comparer.GetCommitDifferences(branchA, branchB);
-        }
-        catch (Exception ex)
-        {
-            Error = ex.Message;
-        }
+        return SettingsService.Current
+            .GitRepositories
+            .FirstOrDefault(r => r.Name == SelectedRepoName)?
+            .Branches
+            .Select(b => b.Name)
+            .Distinct()
+            .ToList() ?? new List<string>();
     }
 
-    private void LoadDiff(string file)
+    private bool CanShowCompareMode =>
+        !string.IsNullOrWhiteSpace(SelectedRepoName) &&
+        !string.IsNullOrWhiteSpace(BranchA) &&
+        !string.IsNullOrWhiteSpace(BranchB) &&
+        BranchA != BranchB;
+
+    private async Task LaunchComparisonPage()
     {
-        if (ExpandedFiles.Contains(file)) return;
-
-        var diff = _comparer.GetFileDiff(file, branchA, branchB);
-        FileDiffs[file] = string.IsNullOrWhiteSpace(diff) ? "(no differences)" : diff;
-        ExpandedFiles.Add(file);
-
+        var url = $"/compareResult?repo={Uri.EscapeDataString(SelectedRepoName)}&branchA={Uri.EscapeDataString(BranchA)}&branchB={Uri.EscapeDataString(BranchB)}&mode={CompareMode}";
+        await JS.InvokeVoidAsync("window.open", url, "_blank");
     }
-
-    private string GetDiffClass(string line)
+    private void ClearOptions()
     {
-        if (line.StartsWith("+")) return "diff-add";
-        if (line.StartsWith("-")) return "diff-del";
-        if (line.StartsWith("@") || line.StartsWith("index") || line.StartsWith("diff")) return "diff-meta";
-        return "";
-    }
-
-    private int ParseHunkStart(string segment)
-    {
-        var cleaned = segment.TrimStart('-', '+');
-        var parts = cleaned.Split(',');
-        return int.TryParse(parts[0], out int result) ? result : 0;
+        SelectedRepoName = string.Empty;
+        BranchA = string.Empty;
+        BranchB = string.Empty;
+        CompareMode = string.Empty;
     }
 }

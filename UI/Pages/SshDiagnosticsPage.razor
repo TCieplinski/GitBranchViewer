@@ -1,0 +1,45 @@
+﻿@page "/ssh"
+@using GitBranchViewer.Core.Utils
+@using System.IO
+
+<h3>🛠 SSH Diagnostics</h3>
+
+<div class="form-group">
+    <label for="sshHost">SSH Host:</label>
+    <input id="sshHost" class="form-control" @bind="SshHost" />
+</div>
+
+<button class="btn btn-primary mt-2" @onclick="RunDiagnostics" disabled="@IsRunning">Run Diagnostics</button>
+
+@if (!string.IsNullOrWhiteSpace(Output))
+{
+    <h5 class="mt-4">Output:</h5>
+    <pre class="diagnostics-box">@Output</pre>
+}
+
+<style>
+    .diagnostics-box {
+        background-color: #f5f5f5;
+        border: 1px solid #ccc;
+        padding: 1rem;
+        max-height: 500px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+    }
+</style>
+
+@code {
+    private string SshHost = "git@gitlab.com";
+    private string Output;
+    private bool IsRunning;
+
+    private async Task RunDiagnostics()
+    {
+        IsRunning = true;
+        Output = "";
+
+        Output = await Task.Run(() => SshDiagnostics.RunAll(SshHost));
+
+        IsRunning = false;
+    }
+}

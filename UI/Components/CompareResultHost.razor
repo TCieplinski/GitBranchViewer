@@ -1,0 +1,193 @@
+﻿@using GitBranchViewer.Core.Config
+@using GitBranchViewer.Core.Services
+@using GitBranchViewer.Core.Models
+@inject SettingsService SettingsService
+
+@code {
+    [Parameter] public string RepoName { get; set; }
+    [Parameter] public string BranchA { get; set; }
+    [Parameter] public string BranchB { get; set; }
+    [Parameter] public string CompareMode { get; set; }
+
+    private GitRepositoryConfig Repo;
+    private List<GitFileChange> ChangedFiles;
+    private List<(string Hash, string Author, string Date, string Message)> Commits;
+    private Dictionary<string, string> FileDiffs = new();
+    private HashSet<string> ExpandedFiles = new();
+    private string Error;
+
+    protected override void OnParametersSet()
+    {
+        try
+        {
+            Repo = SettingsService.Current.GitRepositories.FirstOrDefault(x => x.Name == RepoName);
+            if (Repo == null) throw new InvalidOperationException("Repository not found");
+
+            if (CompareMode == "Simple")
+            {
+                var git = GitServiceFactory.CreateForLocal(Repo.Path);
+                var comparer = new BranchComparisonService(git, SettingsService.Current.DefaultDiffOptions);
+                ChangedFiles = comparer.GetChangedFiles(BranchA, BranchB);
+                Commits = comparer.GetCommitDifferences(BranchA, BranchB);
+            }
+            else if (CompareMode == "Merge")
+            {
+                var mergeManager = new MergeRepoManager(SettingsService.Current, RepoName);
+                var git = GitServiceFactory.CreateForMergeRepo(mergeManager.GetMergeFolderPath(), Repo.RemoteUrl);
+                var comparer = new BranchComparisonService(git, SettingsService.Current.DefaultDiffOptions, mergeManager);
+                var diff = comparer.CompareViaMergeRepo(Repo.RemoteUrl, BranchA, BranchB);
+                FileDiffs["__FULL__"] = diff;
+            }
+            else if (CompareMode == "Remote")
+            {
+                var remoteService = new RemoteCompareService(SettingsService.Current.RemoteTempFolderRoot);
+                ChangedFiles = remoteService.CompareBranches(Repo.RemoteUrl, BranchA, BranchB);
+            }
+        }
+        catch (Exception ex)
+        {
+            Error = ex.Message;
+        }
+    }
+
+    private void LoadDiff(string file)
+    {
+        if (ExpandedFiles.Contains(file)) return;
+
+        if (CompareMode == "Simple")
+        {
+            var git = GitServiceFactory.CreateForLocal(Repo.Path);
+            var comparer = new BranchComparisonService(git, SettingsService.Current.DefaultDiffOptions);
+            FileDiffs[file] = comparer.GetFileDiff(file, BranchA, BranchB);
+        }
+        else if (CompareMode == "Remote")
+        {
+            var remoteService = new RemoteCompareService(SettingsService.Current.RemoteTempFolderRoot);
+            FileDiffs[file] = remoteService.GetFileDiff(Repo.RemoteUrl, BranchA, BranchB, file);
+        }
+
+        ExpandedFiles.Add(file);
+    }
+
+    private string GetDiffClass(string line)
+    {
+        if (line.StartsWith("+")) return "diff-add";
+        if (line.StartsWith("-")) return "diff-del";
+        if (line.StartsWith("@") || line.StartsWith("index") || line.StartsWith("diff")) return "diff-meta";
+        return "";
+    }
+
+    private int ParseHunkStart(string segment)
+    {
+        var cleaned = segment.TrimStart('-', '+');
+        var parts = cleaned.Split(',');
+        return int.TryParse(parts[0], out int result) ? result : 0;
+    }
+}
+
+@if (!string.IsNullOrWhiteSpace(Error))
+{
+    <div class="alert alert-danger">❌ @Error</div>
+}
+else if (CompareMode == "Merge" && FileDiffs.ContainsKey("__FULL__"))
+{
+    <pre class="diff-box">@FileDiffs["__FULL__"]</pre>
+}
+else
+{
+    <h6>🔄 Changed Files</h6>
+    @if (ChangedFiles?.Count == 0)
+    {
+        <p><i>No differences found.</i></p>
+    }
+    else
+    {
+        @foreach (var file in ChangedFiles)
+        {
+            <details @onclick="() => LoadDiff(file.FileName)">
+                <summary><b>@file.Status</b> @file.FileName</summary>
+                @if (ExpandedFiles.Contains(file.FileName))
+                {
+                    <pre class="diff-box">
+                        @{
+                            var lines = FileDiffs[file.FileName].Split('\n');
+                            int oldLine = 0, newLine = 0;
+                            foreach (var line in lines)
+                            {
+                                string label = "     ";
+                                var css = GetDiffClass(line);
+
+                                if (line.StartsWith("@@"))
+                                {
+                                    var parts = line.Split(' ');
+                                    if (parts.Length >= 3)
+                                    {
+                                        oldLine = ParseHunkStart(parts[1]);
+                                        newLine = ParseHunkStart(parts[2]);
+                                    }
+                                    label = "     ";
+                                }
+                                else if (line.StartsWith("+"))
+                                {
+                                    label = $"     {newLine++,4}";
+                                }
+                                else if (line.StartsWith("-"))
+                                {
+                                    label = $"{oldLine++,4}     ";
+                                }
+                                else
+                                {
+                                    label = $"{oldLine++,4} {newLine++,4}";
+                                }
+
+                            <span class="@css">@label: @line</span>
+                            <br />
+                            }
+                        }
+                                    </pre>
+                }
+            </details>
+        }
+    }
+
+    @if (Commits is not null)
+    {
+        <h6 class="mt-4">📜 New Commits in @BranchB (vs @BranchA)</h6>
+        @if (Commits.Count == 0)
+        {
+            <p><i>No new commits found.</i></p>
+        }
+        else
+        {
+            <ul>
+                @foreach (var commit in Commits)
+                {
+                    <li><b>@commit.Hash</b> — @commit.Message (@commit.Author, @commit.Date)</li>
+                }
+            </ul>
+        }
+    }
+}
+
+<style>
+    .diff-box {
+        background-color: #f8f9fa;
+        border: 1px solid #ccc;
+        padding: 0.5rem;
+        font-family: monospace;
+        white-space: pre-wrap;
+        margin-top: 0.5rem;
+    }
+
+    .diff-add {
+        color: green;
+    }
+
+    .diff-del {
+        color: red;
+    }
+
+    .diff-meta {
+        color: gray;
+    }
+</style>

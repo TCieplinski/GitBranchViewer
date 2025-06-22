@@ -61,7 +61,6 @@ namespace GitBranchViewer.Core.Services
             if (_mergeRepoManager == null)
                 throw new InvalidOperationException("MergeRepoManager not configured.");
 
-            _mergeRepoManager.PrepareCleanMergeRepo(remoteUrl);
             _mergeRepoManager.FetchAndCheckoutBranch(sourceBranch, "BranchA");
             _mergeRepoManager.FetchAndCheckoutBranch(targetBranch, "BranchB");
 
@@ -71,12 +70,12 @@ namespace GitBranchViewer.Core.Services
             return RunRawDiff(pathA, pathB);
         }
 
-        private static string RunRawDiff(string pathA, string pathB)
+        private string RunRawDiff(string pathA, string pathB)
         {
             var psi = new ProcessStartInfo
             {
-                FileName = "diff",
-                Arguments = $"-ru \"{pathA}\" \"{pathB}\"",
+                FileName = "git",
+                Arguments = $"diff --no-index -u \"{pathA}\" \"{pathB}\"",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -89,7 +88,7 @@ namespace GitBranchViewer.Core.Services
             process.WaitForExit();
 
             if (process.ExitCode != 0 && string.IsNullOrWhiteSpace(output))
-                throw new InvalidOperationException($"diff failed:\n{error}");
+                throw new InvalidOperationException($"Git diff failed: {error}");
 
             return output;
         }

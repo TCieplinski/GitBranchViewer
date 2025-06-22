@@ -16,10 +16,11 @@ namespace GitBranchViewer.Core.Services
     {
         private readonly string _repositoryPath;
 
-        public GitService(string repositoryPath)
+        public GitService(string repositoryPath, bool skipValidation = false)
         {
             var resolvedPath = FileHelper.ExpandHomePath(repositoryPath);
-            if (!Directory.Exists(Path.Combine(resolvedPath, ".git")))
+
+            if (!skipValidation && !Directory.Exists(Path.Combine(resolvedPath, ".git")))
                 throw new ArgumentException("Invalid Git repository path.");
 
             _repositoryPath = resolvedPath;

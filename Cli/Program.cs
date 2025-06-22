@@ -1,6 +1,7 @@
 using GitBranchViewer.Core.Config;
 using GitBranchViewer.Core.Services;
 using System;
+using System.Linq;
 
 class Program
 {
@@ -13,7 +14,7 @@ class Program
             return;
         }
 
-        // Pick repository
+        // Select repository
         Console.WriteLine("Available repositories:");
         for (int i = 0; i < settings.GitRepositories.Count; i++)
             Console.WriteLine($"{i + 1}. {settings.GitRepositories[i].Name}");
@@ -27,27 +28,68 @@ class Program
 
         var repo = settings.GitRepositories[repoChoice - 1];
 
-        Console.Write("Use merge repo mode? (y/N): ");
-        var useMerge = Console.ReadLine()?.Trim().ToLowerInvariant() == "y";
+        // Select comparison mode
+        Console.WriteLine("\nSelect comparison mode:");
+        Console.WriteLine("1. Local diff");
+        Console.WriteLine("2. Merge repo diff");
+        Console.WriteLine("3. Remote-only shallow diff");
 
-        if (useMerge)
+        Console.Write("Mode [1-3]: ");
+        var mode = Console.ReadLine()?.Trim();
+
+        if (mode == "3" || repo.IsMultiBranch)
         {
-            var mergeManager = new MergeRepoManager(settings);
-            var comparer = new BranchComparisonService(new GitService(repo.Path), settings.DefaultDiffOptions, mergeManager);
+            var remoteService = new RemoteCompareService(settings.RemoteTempFolderRoot);
 
             Console.Write("Enter branch A name: ");
-            string branchA = Console.ReadLine()?.Trim() ?? "";
+            var branchA = Console.ReadLine()?.Trim();
 
             Console.Write("Enter branch B name: ");
-            string branchB = Console.ReadLine()?.Trim() ?? "";
+            var branchB = Console.ReadLine()?.Trim();
+
+            var files = remoteService.CompareBranches(repo.RemoteUrl, branchA, branchB);
+            if (files.Count == 0)
+            {
+                Console.WriteLine("✅ No file differences detected.");
+                return;
+            }
+
+            Console.WriteLine("\n📄 Changed files:");
+            for (int i = 0; i < files.Count; i++)
+                Console.WriteLine($"{i + 1}. {files[i].Status}  {files[i].FileName}");
+
+            Console.Write("\nEnter file number to view content diff: ");
+            if (!int.TryParse(Console.ReadLine(), out int fileIndex) || fileIndex < 1 || fileIndex > files.Count)
+            {
+                Console.WriteLine("Invalid selection.");
+                return;
+            }
+
+            var filePath = files[fileIndex - 1].FileName;
+            Console.WriteLine($"\n🔍 Diff for file: {filePath}");
+
+            var diff = remoteService.GetFileDiff(repo.RemoteUrl, branchA, branchB, filePath);
+            Console.WriteLine(diff);
+        }
+        else if (mode == "2") // Merge repo diff
+        {
+            Console.Write("Enter branch A name: ");
+            var branchA = Console.ReadLine()?.Trim() ?? "";
+
+            Console.Write("Enter branch B name: ");
+            var branchB = Console.ReadLine()?.Trim() ?? "";
+
+            var mergeManager = new MergeRepoManager(settings, repo.Name);
+            var git = GitServiceFactory.CreateForMergeRepo(mergeManager.GetMergeFolderPath(), repo.RemoteUrl);
+            var comparer = new BranchComparisonService(git, settings.DefaultDiffOptions, mergeManager);
 
             Console.WriteLine($"\n🔍 Running merge-mode diff between {branchA} and {branchB}...");
             var diff = comparer.CompareViaMergeRepo(repo.RemoteUrl, branchA, branchB);
             Console.WriteLine(diff);
         }
-        else
+        else if (mode == "1") // Local repo diff
         {
-            var git = new GitService(repo.Path);
+            var git = GitServiceFactory.CreateForLocal(repo.Path);
             var branches = git.GetBranches();
 
             Console.WriteLine("\nAvailable branches:");
@@ -71,6 +113,10 @@ class Program
             var commits = comparer.GetCommitDifferences(branchA, branchB);
             foreach (var c in commits)
                 Console.WriteLine($"  {c.Hash} | {c.Author} | {c.Date} | {c.Message}");
+        }
+        else
+        {
+            Console.WriteLine("❌ Invalid mode selected.");
         }
     }
 }

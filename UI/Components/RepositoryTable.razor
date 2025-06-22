@@ -1,0 +1,53 @@
+﻿@using GitBranchViewer.Core.Config
+@inject GitBranchViewer.Core.Services.SettingsService SettingsService
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="text-primary">📁 Git Repositories</h4>
+    </div>
+
+    <table class="table table-bordered table-hover align-middle">
+        <thead class="table-light">
+            <tr>
+                <th>Name</th>
+                <th>Branch Count</th>
+                <th>Has Path</th>
+                <th>Remote URL</th>
+                <th>Multi Branch</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var repo in SettingsService.Current.GitRepositories)
+            {
+                <tr>
+                    <td>@repo.Name</td>
+                    <td>@(repo.Branches?.Count ?? 0)</td>
+                    <td>
+                        <span class="badge bg-@(string.IsNullOrWhiteSpace(repo.Path) ? "danger" : "success")">
+                            @(string.IsNullOrWhiteSpace(repo.Path) ? "No" : "Yes")
+                        </span>
+                    </td>
+                    <td>@repo.RemoteUrl</td>
+                    <td>@repo.IsMultiBranch</td>
+                    <td>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                                Actions
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#">Details</a></li>
+                                <li><a class="dropdown-item" href="#">Compare</a></li>
+                                <li><a class="dropdown-item text-danger" href="#">Delete</a></li>
+                            </ul>
+                        </div>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+        // TODO: Code
+}

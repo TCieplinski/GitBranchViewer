@@ -1,4 +1,5 @@
-using GitBranchViewer.Core.Config;
+﻿using GitBranchViewer.Core.Config;
+using GitBranchViewer.Core.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Hosting;
@@ -6,6 +7,7 @@ using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Radzen;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -30,11 +32,23 @@ namespace GitBranchViewer.UI
             services.AddRazorPages();
             services.AddServerSideBlazor();
 
-            var env = services.BuildServiceProvider().GetRequiredService<IWebHostEnvironment>();
-            var settingsPath = Path.Combine(env.ContentRootPath, "appsettings.json");
-            var settings = ConfigLoader.Load(settingsPath);
-            services.AddSingleton(settings);
+            services.AddScoped<DialogService>();
+            services.AddScoped<NotificationService>();
+            services.AddScoped<TooltipService>();
+            services.AddScoped<ContextMenuService>();
+
+            // ✅ Only use user.settings.json via SettingsService
+            var userSettingsService = new SettingsService();
+            userSettingsService.Load(); // Load at startup
+            services.AddSingleton(userSettingsService);
+
+            // ❌ Remove or comment out appsettings.json loading
+            // var env = services.BuildServiceProvider().GetRequiredService<IWebHostEnvironment>();
+            // var settingsPath = Path.Combine(env.ContentRootPath, "appsettings.json");
+            // var settings = ConfigLoader.Load(settingsPath);
+            // services.AddSingleton(settings);
         }
+
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
